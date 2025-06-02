@@ -6,7 +6,9 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import com.kyn.qna.dto.QuestionRequest;
 import com.kyn.qna.entity.Question;
+import com.kyn.qna.mapper.EntityDtoMapper;
 import com.kyn.qna.repository.QuestionRepository;
 import com.google.genai.types.Tool;
 
@@ -52,4 +54,8 @@ public class QuestionService {
         return questionRepository.countByCategory(category);
     }    
 
+
+    public Mono<Question> save(QuestionRequest questionRequest) {
+        return questionRepository.save(EntityDtoMapper.toQuestion(questionRequest));
+    }
 } 
