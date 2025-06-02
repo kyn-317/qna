@@ -3,10 +3,11 @@ package com.kyn.qna.repository;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
+
+import com.kyn.qna.entity.Question;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import com.kyn.qna.model.Question;
 
 @Repository
 public interface QuestionRepository extends ReactiveMongoRepository<Question, String> {
@@ -14,20 +15,20 @@ public interface QuestionRepository extends ReactiveMongoRepository<Question, St
 
     Flux<Question> findByCategory(String category);
     
-    Flux<Question> findByAuthor(String author);
+    Flux<Question> findByExpYears(int expYears);
     
-    Flux<Question> findByIsAnswered(boolean isAnswered);
+    Flux<Question> findByCategoryAndExpYears(String category, int expYears);
     
-    @Query("{ 'title': { $regex: ?0, $options: 'i' } }")
-    Flux<Question> findByTitleContainingIgnoreCase(String keyword);
+    Flux<Question> findByScoreBetween(int minScore, int maxScore);
     
-    @Query("{ 'content': { $regex: ?0, $options: 'i' } }")
-    Flux<Question> findByContentContainingIgnoreCase(String keyword);
+    @Query("{ 'question': { $regex: ?0, $options: 'i' } }")
+    Flux<Question> findByQuestionContainingIgnoreCase(String keyword);
+    
+    @Query("{ 'userAnswer': { $regex: ?0, $options: 'i' } }")
+    Flux<Question> findByUserAnswerContainingIgnoreCase(String keyword);
+    
     
     Mono<Long> countByCategory(String category);
-    
-    Mono<Long> countByIsAnswered(boolean isAnswered);
-    
-    @Query(value = "{}", sort = "{ 'viewCount': -1 }")
-    Flux<Question> findTopViewedQuestions();
+        
+
 } 

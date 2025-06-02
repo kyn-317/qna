@@ -22,7 +22,7 @@ public class GeminiController {
     }
 
     @PostMapping("generate")
-    public Mono<String> generate(@RequestBody RequestDto requestDto) {
+    public Mono<String> generate(@RequestBody RequestDto requestDto) throws Exception{
         log.info("Generating response for question: {}", requestDto);
         return geminiService.generateResponse(requestDto.getRequestString());
     }

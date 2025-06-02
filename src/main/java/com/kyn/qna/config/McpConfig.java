@@ -6,8 +6,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.server.RouterFunction;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.kyn.qna.tool.DatabaseTool;
-import com.kyn.qna.tool.GeminiTool;
 
 import io.modelcontextprotocol.server.McpAsyncServer;
 import io.modelcontextprotocol.server.McpServer;
@@ -24,10 +22,6 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 @Slf4j
 public class McpConfig {
-    @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
-    }
     
     @Bean
     @ConditionalOnProperty(prefix = "transport", name = "mode", havingValue = "webflux", matchIfMissing = true)
@@ -52,9 +46,8 @@ public class McpConfig {
     }
     
     @Bean(destroyMethod = "close")
-    public McpAsyncServer mcpAsyncServer(WebFluxSseServerTransportProvider transport, 
-                                       DatabaseTool dataTool,
-                                       GeminiTool geminiTool) {
+    public McpAsyncServer mcpAsyncServer(WebFluxSseServerTransportProvider transport 
+                                   ) {
         log.info("Initializing McpAsyncServer with transport: {}", transport);
         
         // Create a server with custom configuration
@@ -75,19 +68,6 @@ public class McpConfig {
             .data("Server initialized")
             .build());
 
-        // Register the calculator tool
-        var dataToolRegistration = new McpServerFeatures.AsyncToolSpecification(
-            dataTool.getTool(),
-                                        null
-        );
-
-        var geminiToolRegistration = new McpServerFeatures.AsyncToolSpecification(
-            geminiTool.getMcpTool(),
-            null
-        );
-
-        asyncServer.addTool(dataToolRegistration);
-        asyncServer.addTool(geminiToolRegistration);
 
         log.info("MCP Server initialized with capabilities: tools={}, prompts={}, resources={}",
                 asyncServer.getServerCapabilities().tools(),

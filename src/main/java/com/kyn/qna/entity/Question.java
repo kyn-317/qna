@@ -1,4 +1,5 @@
-package com.kyn.qna.model;
+
+package com.kyn.qna.entity;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -8,7 +9,7 @@ import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
 
-@Document(collection = "questions")
+@Document(collection = "question")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -16,12 +17,13 @@ public class Question {
     @Id
     private String _id;
     
-    private String title;
-    private String content;
+    private String question;
+    private String userAnswer;
+    private String modelAnswer;
     private String category;
-    private String author;
+    private int expYears;
+    private int score;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private boolean isAnswered;
-    private int viewCount;
+    
 } 

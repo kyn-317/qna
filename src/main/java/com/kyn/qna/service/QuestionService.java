@@ -6,8 +6,9 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import com.kyn.qna.model.Question;
+import com.kyn.qna.entity.Question;
 import com.kyn.qna.repository.QuestionRepository;
+import com.google.genai.types.Tool;
 
 import java.util.List;
 
@@ -21,6 +22,7 @@ public class QuestionService {
     /**
      * Get all questions
      */
+    
     public Mono<List<Question>> getAllQuestions() {
         log.info("Executing: getAllQuestions()");
         return questionRepository.findAll().collectList();
@@ -43,68 +45,11 @@ public class QuestionService {
     }
     
     /**
-     * Search questions by author
-     */
-    public Mono<List<Question>> getQuestionsByAuthor(String author) {
-        log.info("Executing: getQuestionsByAuthor({})", author);
-        return questionRepository.findByAuthor(author).collectList();
-    }
-    
-    /**
-     * Search questions by title keyword
-     */
-    public Mono<List<Question>> searchQuestionsByTitle(String keyword) {
-        log.info("Executing: searchQuestionsByTitle({})", keyword);
-        return questionRepository.findByTitleContainingIgnoreCase(keyword).collectList();
-    }
-    
-    /**
-     * Search questions by content keyword
-     */
-    public Mono<List<Question>> searchQuestionsByContent(String keyword) {
-        log.info("Executing: searchQuestionsByContent({})", keyword);
-        return questionRepository.findByContentContainingIgnoreCase(keyword).collectList();
-    }
-    
-    /**
-     * Get unanswered questions
-     */
-    public Mono<List<Question>> getUnansweredQuestions() {
-        log.info("Executing: getUnansweredQuestions()");
-        return questionRepository.findByIsAnswered(false).collectList();
-    }
-    
-    /**
-     * Get answered questions
-     */
-    public Mono<List<Question>> getAnsweredQuestions() {
-        log.info("Executing: getAnsweredQuestions()");
-        return questionRepository.findByIsAnswered(true).collectList();
-    }
-    
-    /**
      * Get question count by category
      */
     public Mono<Long> getQuestionCountByCategory(String category) {
         log.info("Executing: getQuestionCountByCategory({})", category);
         return questionRepository.countByCategory(category);
-    }
-    
-    /**
-     * Get unanswered question count
-     */
-    public Mono<Long> getUnansweredQuestionCount() {
-        log.info("Executing: getUnansweredQuestionCount()");
-        return questionRepository.countByIsAnswered(false);
-    }
-    
-    /**
-     * Get top viewed questions
-     */
-    public Mono<List<Question>> getTopViewedQuestions(int limit) {
-        log.info("Executing: getTopViewedQuestions({})", limit);
-        return questionRepository.findTopViewedQuestions()
-                .take(limit)
-                .collectList();
-    }
+    }    
+
 } 
