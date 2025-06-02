@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.kyn.qna.dto.CategoryRequest;
 import com.kyn.qna.entity.Category;
+import com.kyn.qna.service.CategoryManageService;
 import com.kyn.qna.service.CategoryService;
-import com.kyn.qna.service.GeminiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -23,8 +23,8 @@ import reactor.core.publisher.Mono;
 public class CategoryController {
     
     private final CategoryService categoryService;
-    private final GeminiService geminiService;
-
+    private final CategoryManageService categoryManageService;
+    
     @GetMapping("category")
     public Flux<Category> findAll() {
         return categoryService.findAll();
@@ -45,15 +45,20 @@ public class CategoryController {
         return categoryService.update(categoryRequest);
     }
 
-    @DeleteMapping("category/{name}")
-    public Mono<Void> delete(@PathVariable String name) {
-        return categoryService.delete(name);
+    @DeleteMapping("category/{id}")
+    public Mono<Void> delete(@PathVariable String id) {
+        return categoryService.delete(id);
+    }
+
+    @PostMapping("category/manage/{name}")
+    public Mono<Category> manageCategoryByName(@PathVariable String name) {
+        log.info("Managing category by name: {}", name);
+        return categoryManageService.manageSingleCategory(name);
     }
 
     @PostMapping("category/manage")
-    public Mono<String> manageCategory(@RequestBody String question) {
-       log.info("manageCategory: {}", question);
-        return geminiService.manageCategory(question);
+    public Flux<Category> manageCategory() {
+        log.info("Managing all categories");    
+        return categoryManageService.manageAllCategories();
     }
-    
 }
