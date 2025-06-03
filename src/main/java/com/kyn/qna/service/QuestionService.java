@@ -41,9 +41,9 @@ public class QuestionService {
     /**
      * Search questions by category
      */
-    public Mono<List<Question>> getQuestionsByCategory(String category) {
+    public Flux<Question> getQuestionsByCategory(String category) {
         log.info("Executing: getQuestionsByCategory({})", category);
-        return questionRepository.findByCategory(category).collectList();
+        return questionRepository.findByCategory(category);
     }
     
     /**

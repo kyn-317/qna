@@ -1,20 +1,32 @@
 package com.kyn.qna.service;
 
 import com.kyn.qna.dto.QuestionRequest;
-import com.kyn.qna.entity.Question;
+import com.kyn.qna.util.JsonStringUtil;
 
 import reactor.core.publisher.Mono;
 
 public class QuestionManageService {
     private final QuestionService questionService;
+    private final GeminiService geminiService;
 
-    public QuestionManageService(QuestionService questionService) {
+    public QuestionManageService(QuestionService questionService, GeminiService geminiService) {
         this.questionService = questionService;
+        this.geminiService = geminiService;
     }
 
-    public Mono<Question> createQuestion(QuestionRequest questionRequest){
-        return questionService.save(questionRequest);
+    public Mono<String> createQuestion(QuestionRequest questionRequest){
+
+        return questionService.getQuestionsByCategory(questionRequest.category())
+            .collectList()
+            .map(questions -> 
+                questionCreationPrompt
+                .replace("{history}", questions.toString())
+                .replace("{category}", questionRequest.category())
+                .replace("{expYears}", String.valueOf(questionRequest.expYears())))    
+            .flatMap(geminiService::generateResponse)
+            .map(JsonStringUtil::extractJsonFromResponse);
     }
+
 
 
     private String questionCreationPrompt = """ 

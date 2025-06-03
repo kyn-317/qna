@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyn.qna.dto.CategoryRequest;
 import com.kyn.qna.dto.CategoryResult;
 import com.kyn.qna.entity.Category;
+import com.kyn.qna.util.JsonStringUtil;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
@@ -29,13 +30,13 @@ public class CategoryManageService {
         log.info("Managing category: {}", name);
         
         return categoryService.findByName(name)
-            .flatMap(category -> {
-                String prompt = singleCategoryManagePrompt.replace("category_name", category.getName())
-                    .replace("category_description", category.getDescription());
-                
-                return geminiService.generateResponse(prompt)
-                    .flatMap(response -> parseAndProcessResponse(response, category));
-            })
+            .flatMap(category -> 
+                geminiService.generateResponse(
+                    singleCategoryManagePrompt
+                    .replace("{category_name}", category.getName())
+                    .replace("{category_description}", category.getDescription()))
+                .flatMap(response -> parseAndProcessResponse(response, category))
+            )
             .doOnSuccess(result -> log.info("Category management completed for: {}", name))
             .doOnError(error -> log.error("Error managing category: {}", name, error));
     }
@@ -45,22 +46,18 @@ public class CategoryManageService {
         
         return categoryService.findAll()
             .collectList()
-            .flatMap(categories -> {      
-                String categoriesData = categories.toString();
-                String prompt = multiCategoryManagePrompt.replace("allCategoryData__", categoriesData);
-                log.debug("Generated prompt for all categories: {}", prompt);
-            
-                return geminiService.generateResponse(prompt);
-            })
+            .flatMap(categories -> geminiService
+                .generateResponse(multiCategoryManagePrompt
+                    .replace("{category_data}", categories.toString())))
             .flatMapMany(this::parseAllCategoriesResponse)
             .flatMap(categoryResult ->
                 categoryService.findByName(categoryResult.getName())
                 .flatMap(category -> {
                     if(categoryResult.isShouldUpdate()){
-                        CategoryRequest updateRequest = new CategoryRequest();
-                        updateRequest.setName(categoryResult.getName());
-                        updateRequest.setDescription(categoryResult.getDescription());
-                        return categoryService.update(updateRequest);
+                        return categoryService.update(CategoryRequest.builder()
+                            .name(categoryResult.getName())
+                            .description(categoryResult.getDescription())
+                            .build());
                     } else {
                         return Mono.just(category);
                     }
@@ -73,21 +70,14 @@ public class CategoryManageService {
     private Mono<Category> parseAndProcessResponse(String jsonResponse, Category originalCategory) {
         try {
             //extract Json from Response
-            String cleanJson = extractJsonFromResponse(jsonResponse);
-            log.debug("Parsing JSON response: {}", cleanJson);
-            
+            String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);            
             CategoryResult result = objectMapper.readValue(cleanJson, CategoryResult.class);
-            log.info("Parsed result - shouldUpdate: {}, name: {}, description: {}", 
-                    result.isShouldUpdate(), result.getName(), result.getDescription());
             
-            if (result.isShouldUpdate()) {
-                log.info("Updating category '{}' with new description: {}", result.getName(), result.getDescription());
-                
-                CategoryRequest updateRequest = new CategoryRequest();
-                updateRequest.setName(result.getName());
-                updateRequest.setDescription(result.getDescription());
-                
-                return categoryService.update(updateRequest);
+            if (result.isShouldUpdate()) {                
+                return categoryService.update(CategoryRequest.builder()
+                    .name(result.getName())
+                    .description(result.getDescription())
+                    .build());
             } else {
                 return Mono.just(originalCategory);
             }
@@ -98,26 +88,11 @@ public class CategoryManageService {
         }
     }
 
-    private String extractJsonFromResponse(String response) {
 
-        String cleaned = response.trim();
-        
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7); 
-        }
-        if (cleaned.startsWith("```")) {
-            cleaned = cleaned.substring(3); 
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3); 
-        }
-        
-        return cleaned.trim();
-    }
 
     private Flux<CategoryResult> parseAllCategoriesResponse(String jsonResponse) {
         try {
-            String cleanJson = extractJsonFromResponse(jsonResponse);
+            String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);
             CategoryResult[] results = objectMapper.readValue(cleanJson, CategoryResult[].class);            
             return Flux.fromArray(results);
             
@@ -146,8 +121,8 @@ public class CategoryManageService {
                 Do not include any markdown formatting or additional text.
                 
                 =======================
-                "name": "category_name",
-                "description": "category_description"
+                "name": "{category_name}",
+                "description": "{category_description}"
             """;
 
     private String multiCategoryManagePrompt = """
@@ -167,6 +142,6 @@ public class CategoryManageService {
                 },...]
 
                 =======================
-                allCategoryData__
+                {category_data}
             """;
 }

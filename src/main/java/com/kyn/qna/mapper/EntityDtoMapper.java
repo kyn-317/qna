@@ -11,8 +11,8 @@ public class EntityDtoMapper {
     
     public static Category toCategory(CategoryRequest categoryRequest) {
         return Category.builder()
-            .name(categoryRequest.getName())
-            .description(categoryRequest.getDescription())
+            .name(categoryRequest.name())
+            .description(categoryRequest.description())
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build();
@@ -26,4 +26,5 @@ public class EntityDtoMapper {
             .updatedAt(LocalDateTime.now())
             .build();
     }
+
 }
