@@ -104,7 +104,7 @@ public class CategoryManageService {
 
     private String singleCategoryManagePrompt = """
                 You are a category manager.
-                The given data is a category for development technology.
+                The given data is a category for development stack.
                 name and description in the above categories are the technical names and their descriptions, respectively.
                 1. The description of the data must be no more than 100 characters and must be briefly described.
                 2. Duplicate or ambiguous expressions should be avoided.
@@ -127,7 +127,7 @@ public class CategoryManageService {
 
     private String multiCategoryManagePrompt = """
                 You are a category manager.
-                The given data is a category for development technology.
+                The given data is a category for development stack.
                 name and description in the above categories are the technical names and their descriptions, respectively.
                 1. The description of the data must be no more than 100 characters and must be briefly described.
                 2. Duplicate or ambiguous expressions should be avoided.

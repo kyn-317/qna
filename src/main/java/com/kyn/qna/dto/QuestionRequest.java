@@ -1,8 +1,19 @@
 package com.kyn.qna.dto;
 
-import com.google.auto.value.AutoValue.Builder;
+import java.util.List;
+
+import lombok.Builder;
 
 @Builder
-public record QuestionRequest(String category, int expYears) {
+public record QuestionRequest(
+    String _id,
+    String question,
+    String userAnswer, 
+    String modelAnswer,
+    String category, 
+    Integer expYears, 
+    Integer score,
+    List<AdditionalQuestion> additionalQuestions
+    ) {
     
 }

@@ -1,12 +1,7 @@
 package com.kyn.qna.service;
-
-import java.lang.invoke.TypeDescriptor;
-import java.lang.reflect.Method;
-import java.security.PrivateKey;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.data.util.ParameterTypes;
 import org.springframework.stereotype.Service;
 
 import com.google.common.collect.ImmutableList;
@@ -15,9 +10,6 @@ import com.google.genai.types.Content;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Part;
-import com.google.genai.types.Tool;
-import com.google.genai.types.ToolCodeExecution;
-import com.kyn.qna.entity.Question;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;

@@ -7,11 +7,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import com.kyn.qna.dto.QuestionRequest;
+import com.kyn.qna.dto.SimplifiedQuestionRequest;
 import com.kyn.qna.entity.Question;
+import com.kyn.qna.entity.SimplifiedQuestion;
 import com.kyn.qna.mapper.EntityDtoMapper;
 import com.kyn.qna.repository.QuestionRepository;
+import com.kyn.qna.repository.SimplifiedQuestionRepository;
 import com.google.genai.types.Tool;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -20,6 +24,7 @@ import java.util.List;
 public class QuestionService {
     
     private final QuestionRepository questionRepository;
+    private final SimplifiedQuestionRepository simplifiedQuestionRepository;
     
     /**
      * Get all questions
@@ -55,7 +60,34 @@ public class QuestionService {
     }    
 
 
-    public Mono<Question> save(QuestionRequest questionRequest) {
-        return questionRepository.save(EntityDtoMapper.toQuestion(questionRequest));
+    public Mono<Question> insert(QuestionRequest questionRequest) {
+        var question = EntityDtoMapper.toQuestion(questionRequest);
+        question.setCreatedAt(LocalDateTime.now());
+        question.setUpdatedAt(LocalDateTime.now());
+        return questionRepository.save(question);
+    }
+
+    public Mono<Question> update(QuestionRequest questionRequest) {
+        return questionRepository.findById(questionRequest._id())
+        .flatMap(existingQuestion -> {
+            existingQuestion.setQuestion(questionRequest.question());
+            existingQuestion.setUserAnswer(questionRequest.userAnswer());
+            existingQuestion.setAdditionalQuestions(questionRequest.additionalQuestions());
+            existingQuestion.setModelAnswer(questionRequest.modelAnswer());
+            existingQuestion.setScore(questionRequest.score());
+            existingQuestion.setUpdatedAt(LocalDateTime.now());
+            return questionRepository.save(existingQuestion);
+        });
+    }
+
+    public Mono<SimplifiedQuestion> saveSimplifiedQuestion(SimplifiedQuestionRequest request){
+        var simplifiedQuestion = EntityDtoMapper.toSimplifiedQuestion(request);
+        simplifiedQuestion.setCreatedAt(LocalDateTime.now());
+        simplifiedQuestion.setUpdatedAt(LocalDateTime.now());
+        return simplifiedQuestionRepository.save(simplifiedQuestion);
+    }
+
+    public Flux<SimplifiedQuestion> getSimplifiedQuestionByCategory(String category){
+        return simplifiedQuestionRepository.findByCategory(category);
     }
 } 
