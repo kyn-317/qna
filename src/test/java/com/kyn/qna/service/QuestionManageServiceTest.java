@@ -142,4 +142,63 @@ class QuestionManageServiceTest {
         assertNotNull(additionalQuestions);
         assertTrue(additionalQuestions.isEmpty());
     }
+    
+    @Test
+    void testParseResponseWithDollarSignIssue() throws Exception {
+        // Given - JSON with problematic $ character
+        String problematicJsonResponse = """
+            {
+                "score": 85,
+                "modelAnswer": "Spring에서 $를 사용한 환경변수 설정 방법: @Value(\\"${database.url}\\") 같은 형태로 사용합니다."
+            }
+            """;
+            
+        QuestionRequest originalRequest = QuestionRequest.builder()
+            ._id("test-id")
+            .question("원본 질문")
+            .category("Spring")
+            .expYears(5)
+            .build();
+        
+        // When - Use reflection to access private method
+        Method method = QuestionManageService.class.getDeclaredMethod("parseResponse", String.class, QuestionRequest.class);
+        method.setAccessible(true);
+        QuestionRequest result = (QuestionRequest) method.invoke(questionManageService, problematicJsonResponse, originalRequest);
+        
+        // Then - Should handle $ character gracefully
+        assertNotNull(result);
+        assertEquals("test-id", result._id());
+        assertEquals("원본 질문", result.question());
+        assertEquals("Spring", result.category());
+        assertEquals(5, result.expYears());
+        assertEquals(85, result.score());
+        assertNotNull(result.modelAnswer());
+        assertTrue(result.modelAnswer().contains("$"));
+    }
+    
+    @Test
+    void testParseJsonWithFallbackMethod() throws Exception {
+        // Given - JSON that requires enhanced cleaning
+        String problematicJson = """
+            {
+                "question": "테스트 질문",
+                "simplifiedDetail": "요약에 "따옴표"가 포함된 내용입니다."
+            }
+            """;
+            
+        QuestionRequest originalRequest = QuestionRequest.builder()
+            ._id("test-id")
+            .question("원본 질문")
+            .category("Java")
+            .expYears(3)
+            .build();
+        
+        // When - Use reflection to access private method
+        Method method = QuestionManageService.class.getDeclaredMethod("parseSimplifiedQuestion", String.class, QuestionRequest.class);
+        method.setAccessible(true);
+        var result = method.invoke(questionManageService, problematicJson, originalRequest);
+        
+        // Then - Should either parse successfully or return fallback
+        assertNotNull(result);
+    }
 } 

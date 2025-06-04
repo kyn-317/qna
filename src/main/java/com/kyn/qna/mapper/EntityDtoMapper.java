@@ -40,4 +40,16 @@ public class EntityDtoMapper {
             .expYears(request.expYears())
             .build();
     }
+
+    public static QuestionRequest toQuestionRequest(Question question) {
+        return QuestionRequest.builder()
+            ._id(question.get_id())
+            .question(question.getQuestion())
+            .userAnswer(question.getUserAnswer())
+            .modelAnswer(question.getModelAnswer())
+            .score(question.getScore())
+            .category(question.getCategory())
+            .expYears(question.getExpYears())
+            .build();
+    }
 }

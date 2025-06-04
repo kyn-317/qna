@@ -48,6 +48,9 @@ public class JsonStringUtil {
         // This is a simplified fix - for production, you might need more sophisticated regex
         json = fixUnescapedQuotes(json);
         
+        // Remove or escape problematic characters
+        json = fixProblematicCharacters(json);
+        
         return json;
     }
     
@@ -67,6 +70,21 @@ public class JsonStringUtil {
         return sb.toString();
     }
 
+    private static String fixProblematicCharacters(String json) {
+        // Replace unescaped dollar signs that might cause issues
+        json = json.replaceAll("(?<!\\\\)\\$", "\\\\$");
+        
+        // Replace unescaped backslashes (but not already escaped ones)
+        json = json.replaceAll("(?<!\\\\)\\\\(?![\"\\\\])", "\\\\\\\\");
+        
+        // Fix common control characters
+        json = json.replace("\b", "\\b")
+                  .replace("\f", "\\f")
+                  .replace("\r", "\\r")
+                  .replace("\t", "\\t");
+        
+        return json;
+    }
 
     public static ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();

@@ -9,6 +9,7 @@ import com.kyn.qna.dto.QuestionRequest;
 import com.kyn.qna.dto.SimplifiedQuestionRequest;
 import com.kyn.qna.entity.Question;
 import com.kyn.qna.entity.SimplifiedQuestion;
+import com.kyn.qna.mapper.EntityDtoMapper;
 import com.kyn.qna.util.JsonStringUtil;
 
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +59,8 @@ public class QuestionManageService {
             .replace("{question}", questionRequest.toString()))
             .map(JsonStringUtil::extractJsonFromResponse)
             .map(jsonResponse -> parseResponse(jsonResponse, questionRequest))
-            .flatMap(questionService::update);
+            .flatMap(questionService::update)
+            .doOnSuccess(question -> saveSimplifiedQuestion(question));
     }
 
     public Mono<Question> getAdditionalQuestionsAndAnswers(QuestionRequest questionRequest){
@@ -68,7 +70,9 @@ public class QuestionManageService {
         )
         .map(JsonStringUtil::extractJsonFromResponse)
         .map(jsonResponse -> parseAdditionalQuestionsAndAnswers(jsonResponse, questionRequest))
-        .flatMap(questionService::update);
+        .flatMap(questionService::update)
+        .doOnSuccess(question -> saveSimplifiedQuestion(question));
+        
     }
 
 
@@ -81,32 +85,51 @@ public class QuestionManageService {
             .flatMap(questionService::saveSimplifiedQuestion);
     }
     
+    private Mono<SimplifiedQuestion> saveSimplifiedQuestion(Question question){
+        var questionRequest = EntityDtoMapper.toQuestionRequest(question);
+        return geminiService.generateResponse(questionSimplifiedQuestion
+                .replace("{question}", questionRequest.toString()))
+            .map(JsonStringUtil::extractJsonFromResponse)
+            .map(jsonResponse -> parseSimplifiedQuestion(jsonResponse, questionRequest))
+            .flatMap(questionService::saveSimplifiedQuestion);
+    }
+
     private QuestionRequest parseResponse(String jsonResponse, QuestionRequest originalRequest) {
         try {
-            //extract Json from Response
-            String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);            
-            QuestionRequest result = objectMapper.readValue(cleanJson, QuestionRequest.class);
-            String question = result.question() == null ? originalRequest.question() : result.question();
+            // Create a temporary class for parsing the specific response format
+            var parsedResponse = parseJsonWithFallback(jsonResponse, QuestionResponse.class, null);
             
-            if (question != null) {                
+            if (parsedResponse != null) {
+                String question = parsedResponse.question() != null ? parsedResponse.question() : originalRequest.question();
+                
                 return QuestionRequest.builder()
                     .category(originalRequest.category())
                     .expYears(originalRequest.expYears())
                     ._id(originalRequest._id())
                     .userAnswer(originalRequest.userAnswer())
-                    .modelAnswer(result.modelAnswer() == null ? null : result.modelAnswer())
-                    .score(result.score() == null ? null : result.score())
+                    .modelAnswer(parsedResponse.modelAnswer())
+                    .score(parsedResponse.score())
                     .question(question)
+                    .additionalQuestions(originalRequest.additionalQuestions())
                     .build();
             } else {
+                log.warn("Failed to parse response, returning original request");
                 return originalRequest;
             }
             
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse JSON response: {}", jsonResponse, e);
+        } catch (Exception e) {
+            log.error("Unexpected error in parseResponse: {}", e.getMessage());
             return originalRequest;
         }
     }
+    
+    // Helper record for parsing specific response formats
+    private record QuestionResponse(
+        String question,
+        String modelAnswer,
+        Integer score
+    ) {}
+
     private QuestionRequest parseAdditionalQuestionsAndAnswers(String jsonResponse, QuestionRequest originalRequest){
         try {
             String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);
@@ -194,23 +217,61 @@ public class QuestionManageService {
     }
 
     private SimplifiedQuestionRequest parseSimplifiedQuestion(String jsonResponse, QuestionRequest originalRequest){
+        // Create fallback value
+        SimplifiedQuestionRequest fallback = SimplifiedQuestionRequest.builder()
+            ._id(originalRequest._id())
+            .question(originalRequest.question())
+            .category(originalRequest.category())
+            .expYears(originalRequest.expYears())
+            .simplifiedDetail("요약 생성 실패")
+            .build();
+            
         try {
-            String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);
-            SimplifiedQuestionRequest result = objectMapper.readValue(cleanJson, SimplifiedQuestionRequest.class);
-            return result;
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse JSON response: {}", jsonResponse, e);
-            return SimplifiedQuestionRequest.builder()
-                ._id(originalRequest._id())
-                .question(originalRequest.question())
-                .category(originalRequest.category())
-                .expYears(originalRequest.expYears())
-                .build();
+            var result = parseJsonWithFallback(jsonResponse, SimplifiedQuestionRequest.class, fallback);
+            
+            // Validate essential fields
+            if (result != null && result.question() != null) {
+                return result;
+            } else {
+                log.warn("Parsed SimplifiedQuestionRequest has null essential fields, using fallback");
+                return fallback;
+            }
+            
+        } catch (Exception e) {
+            log.error("Unexpected error in parseSimplifiedQuestion: {}", e.getMessage());
+            return fallback;
         }
     }
 
-    
-
+    /**
+     * Common robust JSON parsing utility with multiple fallback strategies
+     */
+    private <T> T parseJsonWithFallback(String jsonResponse, Class<T> targetClass, T fallbackValue) {
+        try {
+            // Strategy 1: Standard JSON parsing
+            String cleanJson = JsonStringUtil.extractJsonFromResponse(jsonResponse);
+            log.debug("Parsing JSON for {}: {}", targetClass.getSimpleName(), cleanJson);
+            return objectMapper.readValue(cleanJson, targetClass);
+            
+        } catch (JsonProcessingException e1) {
+            log.warn("Standard JSON parsing failed for {}, trying enhanced cleaning: {}", targetClass.getSimpleName(), e1.getMessage());
+            
+            // Strategy 2: Enhanced JSON cleaning
+            try {
+                String enhancedCleanJson = JsonStringUtil.extractAndCleanJsonFromResponse(jsonResponse);
+                return objectMapper.readValue(enhancedCleanJson, targetClass);
+                
+            } catch (JsonProcessingException e2) {
+                log.error("Enhanced JSON cleaning also failed for {}: {}", targetClass.getSimpleName(), e2.getMessage());
+                log.error("Failed JSON content: {}", jsonResponse);
+                return fallbackValue;
+            }
+        } catch (Exception e) {
+            log.error("Unexpected error while parsing JSON for {}: {}", targetClass.getSimpleName(), e.getMessage());
+            log.error("Failed JSON content: {}", jsonResponse);
+            return fallbackValue;
+        }
+    }
 
     private String questionCreationPrompt = """ 
             You are a developer interviewer.
@@ -233,13 +294,21 @@ public class QuestionManageService {
             Score will be 0 to 100.
             answers should be korean.
             The model answer should be written with a clear example of what needs to be pointed out and what needs to be supplemented.
+            
+            IMPORTANT JSON FORMATTING RULES:
+            1. All strings must be properly escaped (use \\" for quotes inside strings)
+            2. No line breaks inside string values (use \\n instead)
+            3. Keep model answer concise but informative (max 800 characters)
+            4. Avoid special characters like $ in string values
+            5. Ensure valid JSON format
+            
             ===========question===========
             {question}
             ===========question===========
             Please respond with ONLY a valid JSON object in this exact format:
             {
-                "score": "score",
-                "modelAnswer": "modelAnswer"
+                "score": 85,
+                "modelAnswer": "모델 답변 내용 (특수문자는 적절히 이스케이프 처리)"
             }
             """;
 
