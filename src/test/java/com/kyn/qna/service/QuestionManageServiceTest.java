@@ -1,19 +1,31 @@
 package com.kyn.qna.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kyn.qna.dto.AdditionalQuestion;
 import com.kyn.qna.dto.QuestionRequest;
+import com.kyn.qna.dto.SimplifiedQuestionRequest;
+import com.kyn.qna.entity.Question;
+import com.kyn.qna.entity.SimplifiedQuestion;
 
-import java.lang.reflect.Method;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
+
+import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
+@ExtendWith(MockitoExtension.class)
 class QuestionManageServiceTest {
     
     @Mock
@@ -27,178 +39,321 @@ class QuestionManageServiceTest {
     
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
         objectMapper = new ObjectMapper();
         questionManageService = new QuestionManageService(questionService, geminiService, objectMapper);
     }
     
     @Test
-    void testParseAdditionalQuestionsAndAnswers() throws Exception {
+    void testCreateQuestion_Success() {
         // Given
-        String jsonResponse = """
-            [
-                {
-                    "question": "테스트 질문 1",
-                    "answer": "테스트 답변 1"
-                },
-                {
-                    "question": "테스트 질문 2", 
-                    "answer": "테스트 답변 2"
-                }
-            ]
-            """;
-            
-        QuestionRequest originalRequest = QuestionRequest.builder()
-            ._id("test-id")
-            .question("원본 질문")
+        QuestionRequest request = QuestionRequest.builder()
             .category("Java")
             .expYears(3)
             .build();
-        
-        // When - Use reflection to access private method
-        Method method = QuestionManageService.class.getDeclaredMethod("parseAdditionalQuestionsAndAnswers", String.class, QuestionRequest.class);
-        method.setAccessible(true);
-        QuestionRequest result = (QuestionRequest) method.invoke(questionManageService, jsonResponse, originalRequest);
-        
-        // Then
-        assertNotNull(result);
-        assertEquals("test-id", result._id());
-        assertEquals("원본 질문", result.question());
-        assertEquals("Java", result.category());
-        assertEquals(3, result.expYears());
-        
-        List<AdditionalQuestion> additionalQuestions = result.additionalQuestions();
-        assertNotNull(additionalQuestions);
-        assertEquals(2, additionalQuestions.size());
-        
-        assertEquals("테스트 질문 1", additionalQuestions.get(0).getQuestion());
-        assertEquals("테스트 답변 1", additionalQuestions.get(0).getAnswer());
-        assertEquals("테스트 질문 2", additionalQuestions.get(1).getQuestion());
-        assertEquals("테스트 답변 2", additionalQuestions.get(1).getAnswer());
-    }
-    
-    @Test
-    void testParseAdditionalQuestionsAndAnswersWithMalformedJson() throws Exception {
-        // Given - Malformed JSON with unescaped quotes and line breaks
-        String malformedJsonResponse = """
-            [
-                {
-                    "question": "spring cache의 구체적인 설정방법을 예로 들어줘",
-                    "answer": "Spring Cache는 다양한 방식으로 설정할 수 있지만, 가장 일반적인 방법은 `CacheManager`를 설정하고 `Cacheable` 어노테이션을 사용하는 것입니다."
-                }
-            ]
+            
+        SimplifiedQuestion historyQuestion = SimplifiedQuestion.builder()
+            ._id("history-1")
+            .question("Java 기본 개념은?")
+            .category("Java")
+            .expYears(3)
+            .simplifiedDetail("자바 기본 개념에 대한 질문")
+            .build();
+            
+        String geminiResponse = """
+            {
+                "question": "Java의 다형성(Polymorphism)에 대해 설명해주세요."
+            }
             """;
             
-        QuestionRequest originalRequest = QuestionRequest.builder()
-            ._id("test-id")
-            .question("원본 질문")
-            .category("Spring")
-            .expYears(5)
+        Question savedQuestion = Question.builder()
+            ._id("new-question-id")
+            .question("Java의 다형성(Polymorphism)에 대해 설명해주세요.")
+            .category("Java")
+            .expYears(3)
+            .createdAt(LocalDateTime.now())
             .build();
         
-        // When - Use reflection to access private method
-        Method method = QuestionManageService.class.getDeclaredMethod("parseAdditionalQuestionsAndAnswers", String.class, QuestionRequest.class);
-        method.setAccessible(true);
-        QuestionRequest result = (QuestionRequest) method.invoke(questionManageService, malformedJsonResponse, originalRequest);
+        when(questionService.getSimplifiedQuestionByCategory("Java"))
+            .thenReturn(Flux.just(historyQuestion));
+        when(geminiService.generateResponse(anyString()))
+            .thenReturn(Mono.just(geminiResponse));
+        when(questionService.insert(any(QuestionRequest.class)))
+            .thenReturn(Mono.just(savedQuestion));
         
-        // Then - Should gracefully handle malformed JSON
-        assertNotNull(result);
-        assertEquals("test-id", result._id());
-        assertEquals("원본 질문", result.question());
-        assertEquals("Spring", result.category());
-        assertEquals(5, result.expYears());
-        
-        // Should either parse successfully or return empty list (not null)
-        List<AdditionalQuestion> additionalQuestions = result.additionalQuestions();
-        assertNotNull(additionalQuestions);
-        // The result could be either successfully parsed or empty list depending on fallback success
+        // When & Then
+        StepVerifier.create(questionManageService.createQuestion(request))
+            .assertNext(question -> {
+                assertNotNull(question);
+                assertEquals("new-question-id", question.get_id());
+                assertEquals("Java의 다형성(Polymorphism)에 대해 설명해주세요.", question.getQuestion());
+                assertEquals("Java", question.getCategory());
+                assertEquals(3, question.getExpYears());
+            })
+            .verifyComplete();
+            
+        verify(questionService).getSimplifiedQuestionByCategory("Java");
+        verify(geminiService).generateResponse(contains("Java"));
+        verify(questionService).insert(any(QuestionRequest.class));
     }
     
     @Test
-    void testParseAdditionalQuestionsAndAnswersWithCompletelyInvalidJson() throws Exception {
-        // Given - Completely invalid JSON
-        String invalidJsonResponse = "This is not JSON at all!";
-            
-        QuestionRequest originalRequest = QuestionRequest.builder()
-            ._id("test-id")
-            .question("원본 질문")
+    void testUserAnswered_Success() {
+        // Given
+        QuestionRequest request = QuestionRequest.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .userAnswer("다형성은 하나의 인터페이스로 여러 타입을 처리할 수 있는 능력입니다.")
             .category("Java")
             .expYears(3)
             .build();
-        
-        // When - Use reflection to access private method
-        Method method = QuestionManageService.class.getDeclaredMethod("parseAdditionalQuestionsAndAnswers", String.class, QuestionRequest.class);
-        method.setAccessible(true);
-        QuestionRequest result = (QuestionRequest) method.invoke(questionManageService, invalidJsonResponse, originalRequest);
-        
-        // Then - Should return original request with empty additional questions
-        assertNotNull(result);
-        assertEquals("test-id", result._id());
-        assertEquals("원본 질문", result.question());
-        assertEquals("Java", result.category());
-        assertEquals(3, result.expYears());
-        
-        List<AdditionalQuestion> additionalQuestions = result.additionalQuestions();
-        assertNotNull(additionalQuestions);
-        assertTrue(additionalQuestions.isEmpty());
-    }
-    
-    @Test
-    void testParseResponseWithDollarSignIssue() throws Exception {
-        // Given - JSON with problematic $ character
-        String problematicJsonResponse = """
+            
+        String geminiGradingResponse = """
             {
                 "score": 85,
-                "modelAnswer": "Spring에서 $를 사용한 환경변수 설정 방법: @Value(\\"${database.url}\\") 같은 형태로 사용합니다."
+                "modelAnswer": "다형성은 객체지향 프로그래밍의 핵심 개념으로, 하나의 인터페이스나 기본 클래스 타입으로 여러 구현체를 다룰 수 있는 능력을 의미합니다. 예를 들어 Animal 타입 변수로 Dog, Cat 객체를 모두 참조할 수 있습니다."
             }
             """;
             
-        QuestionRequest originalRequest = QuestionRequest.builder()
-            ._id("test-id")
-            .question("원본 질문")
-            .category("Spring")
-            .expYears(5)
+        Question updatedQuestion = Question.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .userAnswer("다형성은 하나의 인터페이스로 여러 타입을 처리할 수 있는 능력입니다.")
+            .modelAnswer("다형성은 객체지향 프로그래밍의 핵심 개념으로, 하나의 인터페이스나 기본 클래스 타입으로 여러 구현체를 다룰 수 있는 능력을 의미합니다. 예를 들어 Animal 타입 변수로 Dog, Cat 객체를 모두 참조할 수 있습니다.")
+            .score(85)
+            .category("Java")
+            .expYears(3)
+            .updatedAt(LocalDateTime.now())
             .build();
+            
+        SimplifiedQuestion simplifiedQuestion = SimplifiedQuestion.builder()
+            ._id("simplified-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .simplifiedDetail("다형성: 하나의 인터페이스로 여러 타입 처리")
+            .category("Java")
+            .expYears(3)
+            .build();
+            
+        String simplifiedResponse = """
+            {
+                "_id": "simplified-id",
+                "question": "Java의 다형성에 대해 설명해주세요.",
+                "simplifiedDetail": "다형성: 하나의 인터페이스로 여러 타입 처리",
+                "category": "Java",
+                "expYears": "3"
+            }
+            """;
         
-        // When - Use reflection to access private method
-        Method method = QuestionManageService.class.getDeclaredMethod("parseResponse", String.class, QuestionRequest.class);
-        method.setAccessible(true);
-        QuestionRequest result = (QuestionRequest) method.invoke(questionManageService, problematicJsonResponse, originalRequest);
+        when(geminiService.generateResponse(contains("grade")))
+            .thenReturn(Mono.just(geminiGradingResponse));
+        when(questionService.update(any(QuestionRequest.class)))
+            .thenReturn(Mono.just(updatedQuestion));
+        when(geminiService.generateResponse(contains("simplify")))
+            .thenReturn(Mono.just(simplifiedResponse));
+        when(questionService.saveSimplifiedQuestion(any(SimplifiedQuestionRequest.class)))
+            .thenReturn(Mono.just(simplifiedQuestion));
         
-        // Then - Should handle $ character gracefully
-        assertNotNull(result);
-        assertEquals("test-id", result._id());
-        assertEquals("원본 질문", result.question());
-        assertEquals("Spring", result.category());
-        assertEquals(5, result.expYears());
-        assertEquals(85, result.score());
-        assertNotNull(result.modelAnswer());
-        assertTrue(result.modelAnswer().contains("$"));
+        // When & Then
+        StepVerifier.create(questionManageService.userAnswered(request))
+            .assertNext(question -> {
+                assertNotNull(question);
+                assertEquals("question-id", question.get_id());
+                assertEquals(85, question.getScore());
+                assertNotNull(question.getModelAnswer());
+                assertTrue(question.getModelAnswer().contains("다형성"));
+            })
+            .verifyComplete();
+            
+        verify(geminiService).generateResponse(contains("grade"));
+        verify(questionService).update(any(QuestionRequest.class));
+        // SimplifiedQuestion creation은 비동기이므로 직접 verify하기 어려움
     }
     
     @Test
-    void testParseJsonWithFallbackMethod() throws Exception {
-        // Given - JSON that requires enhanced cleaning
-        String problematicJson = """
+    void testGetAdditionalQuestionsAndAnswers_Success() {
+        // Given
+        QuestionRequest request = QuestionRequest.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .userAnswer("다형성은 하나의 인터페이스로 여러 타입을 처리할 수 있는 능력입니다.")
+            .category("Java")
+            .expYears(3)
+            .build();
+            
+        String additionalQuestionsResponse = """
+            [
+                {
+                    "question": "인터페이스와 추상클래스의 차이점은?",
+                    "answer": "인터페이스는 다중 상속이 가능하고 모든 메서드가 추상메서드(default 제외)인 반면, 추상클래스는 단일 상속만 가능하고 구현된 메서드를 가질 수 있습니다."
+                },
+                {
+                    "question": "오버라이딩과 오버로딩의 차이는?",
+                    "answer": "오버라이딩은 상속받은 메서드를 재정의하는 것이고, 오버로딩은 같은 이름의 메서드를 매개변수를 달리해서 여러 개 정의하는 것입니다."
+                }
+            ]
+            """;
+            
+        List<AdditionalQuestion> expectedAdditionalQuestions = Arrays.asList(
+            AdditionalQuestion.builder()
+                .question("인터페이스와 추상클래스의 차이점은?")
+                .answer("인터페이스는 다중 상속이 가능하고 모든 메서드가 추상메서드(default 제외)인 반면, 추상클래스는 단일 상속만 가능하고 구현된 메서드를 가질 수 있습니다.")
+                .build(),
+            AdditionalQuestion.builder()
+                .question("오버라이딩과 오버로딩의 차이는?")
+                .answer("오버라이딩은 상속받은 메서드를 재정의하는 것이고, 오버로딩은 같은 이름의 메서드를 매개변수를 달리해서 여러 개 정의하는 것입니다.")
+                .build()
+        );
+            
+        Question updatedQuestion = Question.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .userAnswer("다형성은 하나의 인터페이스로 여러 타입을 처리할 수 있는 능력입니다.")
+            .additionalQuestions(expectedAdditionalQuestions)
+            .category("Java")
+            .expYears(3)
+            .updatedAt(LocalDateTime.now())
+            .build();
+            
+        SimplifiedQuestion simplifiedQuestion = SimplifiedQuestion.builder()
+            ._id("simplified-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .simplifiedDetail("다형성과 관련 개념들에 대한 Q&A")
+            .category("Java")
+            .expYears(3)
+            .build();
+            
+        String simplifiedResponse = """
             {
-                "question": "테스트 질문",
-                "simplifiedDetail": "요약에 "따옴표"가 포함된 내용입니다."
+                "_id": "simplified-id",
+                "question": "Java의 다형성에 대해 설명해주세요.",
+                "simplifiedDetail": "다형성과 관련 개념들에 대한 Q&A",
+                "category": "Java",
+                "expYears": "3"
+            }
+            """;
+        
+        when(geminiService.generateResponse(contains("records")))
+            .thenReturn(Mono.just(additionalQuestionsResponse));
+        when(questionService.update(any(QuestionRequest.class)))
+            .thenReturn(Mono.just(updatedQuestion));
+        when(geminiService.generateResponse(contains("simplify")))
+            .thenReturn(Mono.just(simplifiedResponse));
+        when(questionService.saveSimplifiedQuestion(any(SimplifiedQuestionRequest.class)))
+            .thenReturn(Mono.just(simplifiedQuestion));
+        
+        // When & Then
+        StepVerifier.create(questionManageService.getAdditionalQuestionsAndAnswers(request))
+            .assertNext(question -> {
+                assertNotNull(question);
+                assertEquals("question-id", question.get_id());
+                assertNotNull(question.getAdditionalQuestions());
+                assertEquals(2, question.getAdditionalQuestions().size());
+                
+                assertEquals("인터페이스와 추상클래스의 차이점은?", 
+                    question.getAdditionalQuestions().get(0).getQuestion());
+                assertEquals("오버라이딩과 오버로딩의 차이는?", 
+                    question.getAdditionalQuestions().get(1).getQuestion());
+            })
+            .verifyComplete();
+            
+        verify(geminiService).generateResponse(contains("records"));
+        verify(questionService).update(any(QuestionRequest.class));
+    }
+    
+    @Test
+    void testCreateQuestion_EmptyHistory() {
+        // Given
+        QuestionRequest request = QuestionRequest.builder()
+            .category("React")
+            .expYears(2)
+            .build();
+            
+        String geminiResponse = """
+            {
+                "question": "React의 useState Hook에 대해 설명해주세요."
             }
             """;
             
-        QuestionRequest originalRequest = QuestionRequest.builder()
-            ._id("test-id")
-            .question("원본 질문")
+        Question savedQuestion = Question.builder()
+            ._id("new-question-id")
+            .question("React의 useState Hook에 대해 설명해주세요.")
+            .category("React")
+            .expYears(2)
+            .createdAt(LocalDateTime.now())
+            .build();
+        
+        when(questionService.getSimplifiedQuestionByCategory("React"))
+            .thenReturn(Flux.empty()); // 히스토리가 없는 경우
+        when(geminiService.generateResponse(anyString()))
+            .thenReturn(Mono.just(geminiResponse));
+        when(questionService.insert(any(QuestionRequest.class)))
+            .thenReturn(Mono.just(savedQuestion));
+        
+        // When & Then
+        StepVerifier.create(questionManageService.createQuestion(request))
+            .assertNext(question -> {
+                assertNotNull(question);
+                assertEquals("React의 useState Hook에 대해 설명해주세요.", question.getQuestion());
+                assertEquals("React", question.getCategory());
+            })
+            .verifyComplete();
+    }
+    
+    @Test
+    void testUserAnswered_GeminiError() {
+        // Given
+        QuestionRequest request = QuestionRequest.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .userAnswer("잘 모르겠습니다.")
             .category("Java")
             .expYears(3)
             .build();
         
-        // When - Use reflection to access private method
-        Method method = QuestionManageService.class.getDeclaredMethod("parseSimplifiedQuestion", String.class, QuestionRequest.class);
-        method.setAccessible(true);
-        var result = method.invoke(questionManageService, problematicJson, originalRequest);
+        when(geminiService.generateResponse(anyString()))
+            .thenReturn(Mono.error(new RuntimeException("Gemini API Error")));
         
-        // Then - Should either parse successfully or return fallback
-        assertNotNull(result);
+        // When & Then
+        StepVerifier.create(questionManageService.userAnswered(request))
+            .expectError(RuntimeException.class)
+            .verify();
+            
+        verify(geminiService).generateResponse(anyString());
+        verifyNoInteractions(questionService);
+    }
+    
+    @Test
+    void testGetAdditionalQuestionsAndAnswers_MalformedJson() {
+        // Given
+        QuestionRequest request = QuestionRequest.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .category("Java")
+            .expYears(3)
+            .build();
+            
+        String malformedJsonResponse = "This is not valid JSON!";
+            
+        Question updatedQuestion = Question.builder()
+            ._id("question-id")
+            .question("Java의 다형성에 대해 설명해주세요.")
+            .additionalQuestions(List.of()) // 빈 리스트로 fallback
+            .category("Java")
+            .expYears(3)
+            .build();
+        
+        when(geminiService.generateResponse(anyString()))
+            .thenReturn(Mono.just(malformedJsonResponse));
+        when(questionService.update(any(QuestionRequest.class)))
+            .thenReturn(Mono.just(updatedQuestion));
+        
+        // When & Then
+        StepVerifier.create(questionManageService.getAdditionalQuestionsAndAnswers(request))
+            .assertNext(question -> {
+                assertNotNull(question);
+                assertEquals("question-id", question.get_id());
+                assertNotNull(question.getAdditionalQuestions());
+                assertTrue(question.getAdditionalQuestions().isEmpty());
+            })
+            .verifyComplete();
     }
 } 

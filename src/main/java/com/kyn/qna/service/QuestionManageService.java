@@ -14,6 +14,7 @@ import com.kyn.qna.util.JsonStringUtil;
 
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,7 +61,15 @@ public class QuestionManageService {
             .map(JsonStringUtil::extractJsonFromResponse)
             .map(jsonResponse -> parseResponse(jsonResponse, questionRequest))
             .flatMap(questionService::update)
-            .doOnSuccess(question -> saveSimplifiedQuestion(question));
+            .flatMap(question -> {
+                saveSimplifiedQuestion(question)
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe(
+                        result -> log.info("SimplifiedQuestion saved successfully: {}", result.get_id()),
+                        error -> log.error("Failed to save SimplifiedQuestion: {}", error.getMessage())
+                    );
+                return Mono.just(question);
+            });
     }
 
     public Mono<Question> getAdditionalQuestionsAndAnswers(QuestionRequest questionRequest){
@@ -71,7 +80,15 @@ public class QuestionManageService {
         .map(JsonStringUtil::extractJsonFromResponse)
         .map(jsonResponse -> parseAdditionalQuestionsAndAnswers(jsonResponse, questionRequest))
         .flatMap(questionService::update)
-        .doOnSuccess(question -> saveSimplifiedQuestion(question));
+        .flatMap(question -> {
+            saveSimplifiedQuestion(question)
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                    result -> log.info("SimplifiedQuestion saved successfully: {}", result.get_id()),
+                    error -> log.error("Failed to save SimplifiedQuestion: {}", error.getMessage())
+                );
+            return Mono.just(question);
+        });
         
     }
 
