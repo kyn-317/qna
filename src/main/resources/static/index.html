@@ -451,8 +451,14 @@
             }
 
             const requestData = {
-                ...currentQuestion,
-                userAnswer: userAnswer
+                _id: currentQuestion._id,
+                question: currentQuestion.question,
+                userAnswer: userAnswer,
+                modelAnswer: currentQuestion.modelAnswer,
+                category: currentQuestion.category,
+                expYears: currentQuestion.expYears,
+                score: currentQuestion.score,
+                additionalQuestions: currentQuestion.additionalQuestions
             };
 
             try {
